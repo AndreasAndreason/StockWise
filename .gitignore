@@ -5,7 +5,6 @@
 
 # Local business data
 data/raw/*
-!data/raw/.gitkeep
 
 # Python
 .venv/
