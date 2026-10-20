@@ -4,7 +4,7 @@ An independent Python project that explores inventory demand forecasting and inv
 
 ## Overview
 
-The project uses historical retail transaction data to explore how data analysis, machine learning, and inventory management logic can be combined to support better stock planning.
+The project uses historical retail transaction data to explore how data analysis, statistical forecasting, machine learning, and inventory management logic can be combined to support better stock planning.
 
 The planned system will:
 
@@ -30,7 +30,7 @@ UCI Machine Learning Repository.
 The original dataset contains transaction data from a UK-based online retailer. It is used as a source of data for developing and demonstrating StockWise.
 
 The original dataset is not included in this repository.
-The *data/raw/* directory is excluded from version control.
+The `data/raw/` directory is excluded from version control.
 
 The source data is processed and transformed for this project. Inventory levels, supplier lead times, safety-stock parameters, and other business-specific data may be synthetically generated.
 
@@ -46,6 +46,12 @@ The dataset's authors and the UCI Machine Learning Repository are not affiliated
 
 ### Data
 
+StockWise intentionally deals with imperfect, poorly structured transactional data because this reflects a common real-world data-engineering problem in retail.
+
+The source dataset was not designed as a normalized inventory-management database. It provides transaction-level records, but important business concepts such as sales, cancellations, returns, damages, and inventory adjustments are not represented as a complete explicit transaction model.
+
+Consequently, part of the project involves interpreting the available fields, classifying transactions, investigating ambiguous records, and creating analytical datasets appropriate for specific use cases.
+
 Initial analysis of the Online Retail dataset identified:
 
 - 541,909 transaction lines
@@ -53,76 +59,94 @@ Initial analysis of the Online Retail dataset identified:
 - 25,900 unique invoices
 - Transaction dates from December 2010 to December 2011
 - Missing product descriptions
-- Missing "CustomerID" values
+- Missing `CustomerID` values
 - 10,624 transactions with negative quantities
 - 9,288 cancellation invoices
 
-Negative transaction records were investigated to better understand their meaning and determine how they should be handled during demand-data preparation.
+This data-quality investigation is an intentional part of the project. The goal is not simply to remove unusual records, but to determine what information can be reliably inferred from the source data without inventing business relationships that are not actually provided.
 
-The investigation showed that negative quantities do not exclusively represent customer cancellations. Some records appear to describe operational events or inventory adjustments, including:
+#### Transaction Classification
+
+Transactions are classified using the available invoice numbers and quantity values:
+
+| Transaction Type | Identification | Demand Treatment |
+|------------------|----------------|------------------|
+| Sale | `Quantity > 0` | Included |
+| Cancellation | `InvoiceNo` starts with `C` | Excluded |
+| Inventory adjustment | Negative quantity without a cancellation invoice | Excluded |
+
+The UCI dataset documentation identifies invoice numbers beginning with `C` as cancellations.
+
+Negative quantities are not automatically interpreted as customer returns. Investigation of the source data found negative records with descriptions such as:
 
 - *"thrown away"*
-- *"Unsaleable, destroyed"*
+- *"Unsaleable, destroyed."*
 - *"damages"*
 - *"damaged"*
 - *"Manual"*
 - *"check"*
 - missing or unclear descriptions
 
-Consequently, negative quantities are not treated as a direct measure of customer returns or cancellations.
+These observations indicate that negative transactions can represent different operational events. The available source fields do not provide enough information to reliably distinguish every possible business meaning.
 
-#### Transaction Classification
-
-Transactions are classified using the available invoice numbers and quantity values:
-
-| Transaction Type     | Identification                                   | Demand Treatment
-|----------------------|--------------------------------------------------|------------------------------------------
-| Sale                 | "Quantity" > 0                                   | Included unless matched to a cancellation
-| Cancellation         | "InvoiceNo" starts with  "C"                     | Excluded from demand
-| Inventory adjustment | Negative quantity without a cancellation invoice | Excluded from demand
+Therefore, StockWise preserves the distinction between cancellations and other negative transactions rather than treating all negative quantities as customer returns.
 
 #### Cancellation Matching
 
-A further investigation identified cases where a positive sales line was subsequently reversed by a cancellation record. Simply aggregating all positive quantities would retain these reversed sales and could inflate measured demand.
+An initial investigation attempted to match cancellation records to earlier positive sales.
 
-The cleaning workflow therefore attempts to match cancellation lines to earlier sales lines. The current matching heuristic uses the following conditions:
+The matching approach used:
 
-- The product identifier (*"StockCode"*) must match.
-- The unit price (*"UnitPrice"*) must match.
-- The cancellation quantity must equal the absolute quantity of the candidate sale.
-- The sale must occur before the cancellation.
-- The time difference must not exceed 14 days.
-- A positive sales line can be matched only once.
+- the same `StockCode`
+- the same `UnitPrice`
+- the same absolute `Quantity`
+- an earlier `InvoiceDate`
+- a limited time window
+- one-to-one matching between cancellation and sale records
 
-When a match is found, the corresponding positive sales line is excluded from the demand dataset.
+This investigation was useful for understanding the data, but it was ultimately rejected as part of the demand-cleaning process.
 
-The 14-day matching window is a project-specific heuristic informed by inspection of the transaction records. It does not represent a verified cancellation policy of the original retailer.
+The source dataset identifies cancellation records but does not provide an explicit relationship or transaction ID linking a cancellation to its original order. Therefore, a statistical match based on product, quantity, price, and time cannot establish with certainty that two records represent the same underlying order.
 
-Matching is based on available transaction fields and cannot establish with certainty that two records refer to the same underlying order. Unmatched cancellation records do not automatically remove positive sales.
+For example, multiple transactions can contain the same product, quantity, and price. Selecting the closest previous transaction creates an inferred relationship that may not exist in the original operational system.
+
+The project therefore follows a conservative principle:
+
+> **Do not invent business relationships that cannot be established from the source data.**
+
+Cancellation records are consequently treated as independent transaction events and excluded from the demand dataset rather than being used to remove potentially corresponding positive sales.
+
+The previously investigated matching approach remains part of the project's data-quality investigation, but it is not used by the current cleaning logic.
 
 #### Demand Definition
 
-For the initial forecasting dataset, demand is defined as the sum of positive sales quantities remaining after the cancellation-matching procedure.
+For the initial forecasting dataset, demand is defined as the sum of positive sales quantities.
 
-Negative cancellation and inventory-adjustment records are not directly counted as demand. Positive sales lines matched to cancellations within the configured matching window are also excluded.
+Cancellation records and other negative inventory movements are not treated as negative demand.
 
-This approach aims to reduce identifiable reversals while preserving recorded sales that cannot be reliably matched to a cancellation.
+The resulting `daily_sales.csv` dataset therefore represents historical product demand, rather than a complete representation of every physical inventory movement.
+
+This distinction is important for the future inventory-management functionality. Returns, damages, cancellations, and stock adjustments may affect inventory levels or warehouse capacity, but they should not automatically be interpreted as negative customer demand.
 
 #### Demand Investigation and Outlier Handling
 
-After applying the cleaning workflow, the processed demand data was investigated to identify unusually large product-day quantities and high-volume sales dates.
+After the initial demand preparation, the processed demand data was investigated to identify unusually large product-day quantities and high-volume sales dates.
 
-The investigation highlighted a recorded demand quantity of **12,540 units** for product *"84826"* on **25 November 2011**.
+The investigation highlighted:
 
-The corresponding raw transactions were inspected. No cancellation was identified for this position, so the observation is retained in the processed dataset.
+- A recorded demand quantity of 80,995 units for product `23843`
+- A recorded demand quantity of 12,540 units for product `84826` on 25 November 2011
+- Other high-volume product-day observations
 
-Although the quantity is substantially larger than other observed product-day values, its magnitude alone is not sufficient evidence that it is invalid. Removing it during data cleaning would risk discarding a genuine bulk sale.
+The corresponding raw transactions were inspected where appropriate. The 12,540-unit observation for product `84826` did not have an identified cancellation at the investigated position and was therefore retained.
+
+The 80,995-unit observation was also retained. Although it is an extreme observation, its magnitude alone is not sufficient evidence that it is invalid. The earlier investigation found a corresponding cancellation record, but the available source fields do not provide enough information to establish a reliable general cancellation-to-original-sale relationship.
 
 The current approach is therefore to:
 
-- Preserve the observation in the processed demand data.
+- Preserve unusual observations in the processed demand data.
 - Investigate unusually large quantities rather than automatically deleting them.
-- Evaluate statistical methods for identifying extreme demand values in a later stage.
+- Evaluate statistical methods for identifying extreme demand values.
 - Report detected deviations transparently.
 - Assess the impact of extreme observations on forecasting performance.
 
@@ -133,54 +157,52 @@ Outlier detection and treatment will be considered separately from transaction c
 The current data-processing workflow is:
 
     Online Retail.xlsx
-            |
-            v
+           |
+           v
     Data Quality Analysis
-            |
-            v
+           |
+           v
     Transaction Classification
-            |
-            +------------------------+
-            |                        |
-            v                        v
-       Sales Lines          Negative Transactions
-            |                        |
-            |                +-------+--------+
-            |                |                |
-            |                v                v
-            |          Cancellations   Inventory Adjustments
-            |                |
-            +----------------+
-                    |
-                    v
-         Cancellation Matching
-          (14-day heuristic)
-                    |
-                    v
-       Exclude Matched Sales Lines
-                    |
-                    v
-        Aggregate Daily Demand
-        by Date and StockCode
-                    |
-                    v
-       data/processed/daily_sales.csv
+           |
+           +----------------------+
+           |                      |
+           v                      v
+         Sales            Negative Transactions
+           |               |                |
+           |               v                v
+           |        Cancellations   Inventory Adjustments
+           |
+           v
+    Aggregate Daily Demand
+    by Date and StockCode
+           |
+           v
+    data/processed/daily_sales.csv
 
-Initial data analysis, investigation, and processing scripts are located in:
+Initial data analysis and investigation scripts are located in:
+
+    analysis/
+
+The data-cleaning script is located in:
 
     scripts/
 
-Current scripts include:
+The analysis scripts are numbered chronologically to document the investigation and development process.
 
-    scripts/inspect_data.py
-    scripts/data_quality.py
+Current analysis scripts include:
+
+    analysis/
+        01_inspect_data.py
+        02_data_quality.py
+        ...
+        08_evaluate_baseline.py
+        09_profile_demand.py
+
+The cleaning script is:
+
     scripts/clean_data.py
-    scripts/inspect_processed_data.py
-    scripts/inspect_demand.py
-    scripts/inspect_product.py
-    scripts/inspect_cancellations.py
 
-The scripts support raw-data inspection, data-quality checks, transaction classification, cancellation investigation, demand cleaning, and analysis of the processed dataset.
+These scripts support raw-data inspection, data-quality checks, transaction classification, cancellation investigation, demand investigation, processed-data validation, baseline forecasting evaluation, and statistical demand profiling.
 
 The processed demand dataset is generated at:
 
@@ -190,11 +212,11 @@ The processed demand dataset is generated at:
 
 The initial processed demand dataset contains:
 
-|Field     | Description
-|----------|-----------------------------------------------------------------
-|Date      | Transaction date
-|StockCode | Product identifier
-|Demand	   | Total positive transaction quantity for the product on that date
+| Field | Description |
+|-------|-------------|
+| `Date` | Transaction date |
+| `StockCode` | Product identifier |
+| `Demand` | Total positive sales quantity for the product on that date |
 
 The source transaction data also contains:
 
@@ -218,73 +240,288 @@ Completed work includes:
 - Analysis of missing values and negative quantities.
 - Classification of sales, cancellations, and inventory adjustments.
 - Investigation of cancellation-to-sale matching.
-- Implementation of a configurable cancellation-matching window.
+- Rejection of unreliable cancellation-to-sale matching as part of demand cleaning.
+- Definition of demand as positive sales quantities.
 - Inspection of unusually large product-day demand values.
 - Generation and validation of the processed daily-demand dataset.
+- Separation of exploratory analysis scripts from the data-cleaning script.
+- Creation of a continuous daily time series for each product within its observed activity period.
+- Filling missing product-days within the observed activity period with zero demand.
+- Evaluation of a 7-day seasonal-naive forecasting baseline.
+- Statistical profiling of product-level demand characteristics.
 
-The current output contains daily demand aggregated by date and product identifier. Further work will focus on demand analysis, feature engineering, and forecasting.
+The current output contains daily demand aggregated by date and product identifier.
 
-The cleaning logic is based on the fields available in the source dataset. Because the original retailer's operational rules are not fully documented, some transaction interpretations and matching decisions remain heuristic.
+The forecasting dataset currently contains:
+
+- 3,941 products
+- 1,077,874 product-day observations
+- Date range from 2010-12-01 to 2011-12-09
+- 801,031 zero-demand product-days
+- 276,843 positive-demand product-days
+- Approximately 74.4% zero-demand observations
+
+The cleaning and forecasting preparation logic is based on the fields available in the source dataset. Because the original retailer's operational rules are not fully documented, some transaction interpretations remain limited by the available source information.
+
+### Demand Forecasting Analysis
+
+The forecasting stage begins with statistical analysis before applying machine-learning models.
+
+The purpose is to understand the structure of product demand and select forecasting methods based on the observed data characteristics rather than assuming that a single machine-learning model is appropriate for every product.
+
+#### Continuous Product Time Series
+
+The aggregated demand dataset contains only product-days on which transactions were recorded.
+
+For forecasting, each product is converted into a continuous daily time series covering its observed activity period:
+
+- The first observed sale defines the beginning of the product's activity period.
+- The last observed sale defines the end of the activity period.
+- Missing dates inside that period are added with `Demand = 0`.
+- Dates before the first observed sale and after the last observed sale are not artificially filled.
+
+This produces a forecasting dataset suitable for lag-based and time-series forecasting methods.
+
+#### Baseline Forecast
+
+The first forecasting benchmark is a 7-day seasonal-naive baseline:
+
+    Forecast(t) = Demand(t - 7)
+
+The model assumes that demand for a product on a given day will be equal to its demand seven days earlier.
+
+Evaluation uses a chronological 80/20 time-based split rather than a random split.
+
+The current evaluation produced:
+
+| Metric | Result |
+|--------|--------|
+| Cutoff date | 2011-09-26 |
+| Training rows | 843,845 |
+| Test rows | 207,492 |
+| MAE | 10.11 |
+| RMSE | 62.37 |
+
+**MAE** of 10.11 means that the baseline's average absolute prediction error is approximately 10 demand units per product-day across the evaluated test observations.
+
+The considerably larger RMSE of 62.37 indicates that some forecasting errors are substantially larger than the typical error. This is consistent with the presence of highly variable and extreme demand observations in the dataset.
+
+The baseline is retained as a reference point for subsequent statistical and machine-learning forecasting methods.
+
+#### Statistical Demand Profile
+
+The product-level demand profile revealed several important characteristics.
+
+Across the 3,941 products:
+
+- Average active history: approximately 274 days
+- Median active history: 353 days
+- Average zero-demand percentage: approximately 70.5%
+- Median zero-demand percentage: approximately 78.4%
+- Average positive-demand percentage: approximately 29.5%
+- Median positive-demand percentage: approximately 21.6%
+- Average coefficient of variation: approximately 4.36
+- Median coefficient of variation: approximately 3.75
+
+The forecasting dataset therefore exhibits substantial intermittency.
+
+Many products have zero demand on most observed days. Some products have extremely sparse demand; for example, product `79151B` has only two positive-demand days across 359 active days.
+
+Demand is also highly skewed and variable. The difference between mean and median demand is substantial for many products, and some products contain very large individual demand events.
+
+Examples include:
+
+- Product `84826`: mean demand approximately 36.94 units, standard deviation approximately 651.14, maximum 12,540 units.
+- Product `23166`: mean demand approximately 239.37 units, median demand 0, maximum 74,215 units.
+- Product `23843`: one observed active day with demand of 80,995 units.
+
+These results indicate that StockWise is not simply a conventional smooth demand-forecasting problem.
+
+The data contains:
+
+- Frequent zero-demand periods
+- Intermittent demand
+- High demand variability
+- Strong right-skewness
+- Extreme demand events
+- Products with very different amounts of historical information
+
+Because of these characteristics, the forecasting strategy will first evaluate statistical and intermittent-demand methods before relying on machine-learning models.
+
+Future forecasting analysis will compare simple statistical baselines and specialized intermittent-demand methods with machine-learning approaches using the same time-based evaluation framework.
 
 ### Architecture
 
+The planned system architecture is:
 
+    Raw Dataset
+         |
+         v
+    Data Validation & Cleaning
+         |
+         v
+    PostgreSQL
+         |
+         v
+    Feature Engineering
+         |
+         v
+    Demand Forecasting
+         |
+         +---------------> FastAPI
+         |
+         +---------------> Streamlit Dashboard
 
 ### Machine Learning
 
+Machine-learning forecasting models will be evaluated after the statistical forecasting stage.
 
+Planned candidate models include:
+
+- Linear Regression
+- Random Forest
+- Gradient Boosting
+
+Potential forecasting features include:
+
+- Historical demand lags
+- Rolling demand statistics
+- Day of week
+- Month
+- Other relevant product or transaction features identified during analysis
+
+Models will be evaluated using chronological time-based validation.
+
+Machine-learning models will be compared against the established statistical baselines rather than evaluated in isolation.
 
 ### API
 
+Planned REST API endpoints include:
 
+- `GET /health`
+- `GET /products`
+- `GET /forecast/`
+- `GET /inventory/alerts`
+- `GET /anomalies`
+
+The API will be implemented using FastAPI.
 
 ### Dashboard
 
+The planned manager dashboard will provide:
 
+- Historical demand trends
+- Forecasted demand
+- Inventory alerts
+- Reorder recommendations
+- Unusual demand patterns
+
+The dashboard will be implemented using Streamlit.
 
 ## Technology Stack
 
 - Python 3.14
 - pandas
 - NumPy
+- scikit-learn
+- FastAPI
+- Streamlit
+- PostgreSQL
+- pytest
+- Docker / Docker Compose
+- GitHub Actions
+
+Additional libraries will be added only when justified by the project requirements.
 
 ## Application Workflow
 
+The intended application workflow is:
 
+    Historical Transactions
+            |
+            v
+    Data Quality & Cleaning
+            |
+            v
+    Daily Product Demand
+            |
+            v
+    Demand Analysis
+            |
+            v
+    Statistical Forecasting
+            |
+            v
+    Machine Learning Forecasting
+            |
+            v
+    Forecast Evaluation
+            |
+            v
+    Inventory / Reorder Logic
+            |
+            v
+    FastAPI + Streamlit
 
 ## Project Structure
 
     StockWise/
-        data/
-            processed/
-            raw/
-        scripts/
-            clean_data.py
-            data_quality.py
-            inspect_data.py
-        .gitattributes
-        .gitignore        
-        README.md
+    ├── analysis/
+    │   ├── 01_inspect_data.py
+    │   ├── ...
+    │   ├── 08_evaluate_baseline.py
+    │   └── 09_profile_demand.py
+    ├── core/
+    │   ├── __init__.py
+    │   └── forecasting/
+    │       ├── __init__.py
+    │       ├── dataset.py
+    │       └── baseline.py
+    ├── data/
+    │   ├── processed/
+    │   │   └── daily_sales.csv
+    │   └── raw/
+    ├── scripts/
+    │   └── clean_data.py
+    ├── tests/
+    ├── .gitattributes
+    ├── .gitignore
+    ├── README.md
+    └── requirements.txt
 
 ## Installation
 
 ### Requirements
 
-- Python 3.14.
+- Python 3.14
+
+Install the project dependencies:
+
+    pip install -r requirements.txt
 
 ## Usage
 
+Run analysis scripts from the project root using Python's module execution syntax.
+
 Initial data inspection:
 
-    python scripts/inspect_data.py
+    python -m analysis.01_inspect_data
 
 Run the data-quality analysis:
 
-    python scripts/data_quality.py
+    python -m analysis.02_data_quality
 
 Generate the initial processed daily-demand dataset:
 
     python scripts/clean_data.py
+
+Evaluate the forecasting baseline:
+
+    python -m analysis.08_evaluate_baseline
+
+Profile product-level demand:
+
+    python -m analysis.09_profile_demand
 
 The processed dataset will be written to:
 
@@ -294,13 +531,50 @@ Further usage instructions will be added as the API, forecasting pipeline, and d
 
 ## Privacy and Data Handling
 
+The original UCI Online Retail dataset is not included in version control.
 
+The `data/raw/` directory is excluded from the repository because the project does not redistribute the original dataset.
+
+Any synthetic inventory data introduced later in the project will be clearly identified as synthetic.
 
 ## Limitations
 
+The current project has several important limitations:
 
+- The source dataset represents a UK-based online retailer rather than the fictional Examplemarkt business case used to demonstrate the project.
+- The source dataset is transaction-oriented and does not provide a complete inventory-management data model.
+- Actual inventory levels are not provided by the source dataset.
+- Supplier lead times are not provided.
+- Safety-stock parameters are not provided.
+- Returns, damages, cancellations, and other inventory movements cannot always be reliably distinguished from the available fields.
+- Cancellation records cannot be reliably linked to their original orders.
+- The forecasting dataset contains highly intermittent demand.
+- Some products have very limited historical observations.
+- Extreme demand observations may strongly influence forecasting metrics.
+- The final forecasting model has not yet been selected.
+- Reorder recommendations will require additional inventory parameters that may need to be synthetically generated.
+
+These limitations are part of the project's design and will be documented as the system develops.
 
 ## Future Improvements
+
+Planned next steps include:
+
+- Evaluate additional statistical forecasting methods.
+- Evaluate intermittent-demand forecasting methods such as Croston, SBA, and TSB.
+- Compare statistical methods using the same time-based evaluation framework.
+- Develop forecasting features for machine-learning models.
+- Train and evaluate machine-learning forecasting models.
+- Compare statistical and machine-learning forecasting performance.
+- Investigate product-level model selection.
+- Develop anomaly detection for unusual demand patterns.
+- Introduce synthetic inventory levels and supplier lead times.
+- Implement reorder-point and reorder-quantity calculations.
+- Build the FastAPI service.
+- Build the Streamlit dashboard.
+- Add automated tests.
+- Add Docker / Docker Compose configuration.
+- Add GitHub Actions for automated testing.
 
 ## License
 

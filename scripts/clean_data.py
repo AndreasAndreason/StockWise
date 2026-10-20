@@ -1,21 +1,24 @@
 import pandas as pd
+import time
 from pathlib import Path
 
 
 RAW_FILE = Path("data/raw/Online Retail.xlsx")
 OUTPUT_FILE = Path("data/processed/daily_sales.csv")
 
-# Project-specific heuristic: only match cancellations
-# to earlier sales within 14 days.
-CANCELLATION_WINDOW_DAYS = 14
-
 
 def load_data():
     print("Loading raw dataset...")
-    return pd.read_excel(RAW_FILE)
+    start = time.perf_counter()
+
+    df = pd.read_excel(RAW_FILE)
+
+    print(f"Loading completed in {time.perf_counter() - start:.2f} seconds")
+    return df
 
 
 def classify_transactions(df):
+    start = time.perf_counter()
     df = df.copy()
 
     invoice = df["InvoiceNo"].astype(str).str.strip()
@@ -28,6 +31,7 @@ def classify_transactions(df):
 
     df.loc[(df["Quantity"] < 0) & ~invoice.str.startswith("C"), "TransactionType"] = "INVENTORY_ADJUSTMENT"
 
+    print(f"Classification completed in {time.perf_counter() - start:.2f} seconds")
     return df
 
 
@@ -46,6 +50,7 @@ def match_cancellations(df):
     Returns the set of sale row indices that were identified
     as reversed by a cancellation.
     """
+    start = time.perf_counter()
 
     sales = df[df["TransactionType"] == "SALE"].copy()
 
@@ -59,6 +64,9 @@ def match_cancellations(df):
     used_sales = set()
     reversed_sales = set()
 
+    matched_within_window = 0
+    unmatched_cancellations = 0
+
     for sale_index, cancellation in cancellations.iterrows():
 
         candidates = sales[
@@ -70,6 +78,7 @@ def match_cancellations(df):
         ]
 
         if candidates.empty:
+            unmatched_cancellations += 1
             continue
 
         candidates = candidates.copy()
@@ -86,22 +95,28 @@ def match_cancellations(df):
         used_sales.add(best_match.name)
         reversed_sales.add(best_match.name)
 
+    print(f"Cancellation matching completed in {time.perf_counter() - start:.2f} seconds")
+
+    print(f"Unmatched cancellations: {unmatched_cancellations:,}")
+    print(f"Matched sales: {len(reversed_sales):,}")
+
     return reversed_sales
 
 
 def create_daily_sales(df):
     df = df.copy()
 
-    reversed_sales = match_cancellations(df)
-
-    print(f"\nMatched reversed sales: {len(reversed_sales):,}")
-
-    # Keep positive sales that were not reversed
-    sales = df[(df["TransactionType"] == "SALE") & (~df.index.isin(reversed_sales))].copy()
+    # Demand consists of positive sales only.
+    # Cancellations and other negative inventory movements
+    # are intentionally excluded from demand forecasting.
+    sales = df[df["TransactionType"] == "SALE"].copy()
 
     sales["Date"] = sales["InvoiceDate"].dt.date
 
-    daily_sales = (sales.groupby(["Date", "StockCode"], as_index=False).agg(Demand=("Quantity", "sum")))
+    daily_sales = (
+        sales.groupby(["Date", "StockCode"], as_index=False)
+        .agg(Demand=("Quantity", "sum"))
+    )
 
     return daily_sales
 

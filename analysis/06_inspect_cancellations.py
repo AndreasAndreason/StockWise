@@ -12,9 +12,7 @@ df["StockCode"] = df["StockCode"].astype(str).str.strip()
 # --------------------------------------------------
 
 sales = df[df["Quantity"] > 0].copy()
-cancellations = df[
-    df["InvoiceNo"].astype(str).str.startswith("C")
-].copy()
+cancellations = df[df["InvoiceNo"].astype(str).str.startswith("C")].copy()
 
 cancellations["CancelledQuantity"] = cancellations["Quantity"].abs()
 
@@ -27,9 +25,7 @@ print(f"Cancellation rows: {len(cancellations):,}")
 # --------------------------------------------------
 
 sales = sales.reset_index().rename(columns={"index": "SaleRowID"})
-cancellations = cancellations.reset_index().rename(
-    columns={"index": "CancellationRowID"}
-)
+cancellations = cancellations.reset_index().rename(columns={"index": "CancellationRowID"})
 
 # Sort chronologically
 sales = sales.sort_values("InvoiceDate")
@@ -58,9 +54,7 @@ for _, cancellation in cancellations.iterrows():
     # Choose the closest previous sale
     candidates = candidates.copy()
 
-    candidates["TimeDifference"] = (
-        cancellation["InvoiceDate"] - candidates["InvoiceDate"]
-    )
+    candidates["TimeDifference"] = (cancellation["InvoiceDate"] - candidates["InvoiceDate"])
 
     best = candidates.loc[candidates["TimeDifference"].idxmin()]
 
@@ -77,9 +71,7 @@ for _, cancellation in cancellations.iterrows():
             "UnitPrice": cancellation["UnitPrice"],
             "InvoiceDate_sale": best["InvoiceDate"],
             "InvoiceDate_cancel": cancellation["InvoiceDate"],
-            "DaysDifference": (
-                cancellation["InvoiceDate"] - best["InvoiceDate"]
-            ).total_seconds() / 86400,
+            "DaysDifference": (cancellation["InvoiceDate"] - best["InvoiceDate"]).total_seconds() / 86400,
         }
     )
 
@@ -92,10 +84,8 @@ matches = pd.DataFrame(matches)
 print("\n--- Matching Results ---")
 
 print(f"Matched cancellation rows: {len(matches):,}")
-print(
-    f"Unmatched cancellation rows: "
-    f"{len(cancellations) - len(matches):,}"
-)
+print(f"Unmatched cancellation rows: {len(cancellations) - len(matches):,}")
+print(f"Cancellation rows with a matched previous sale: {len(matches):,}")
 
 if not matches.empty:
 
@@ -113,22 +103,11 @@ if not matches.empty:
         "DaysDifference",
     ]
 
-    print(
-        matches[columns]
-        .head(20)
-        .to_string(index=False)
-    )
+    print(matches[columns].head(20).to_string(index=False))
 
     print("\n--- Largest Time Differences ---")
 
-    print(
-        matches.sort_values(
-            "DaysDifference",
-            ascending=False
-        )[columns]
-        .head(20)
-        .to_string(index=False)
-    )
+    print(matches.sort_values("DaysDifference", ascending=False)[columns].head(20).to_string(index=False))
 
     print("\n--- Time Difference Statistics ---")
 
@@ -147,11 +126,7 @@ if not matches.empty:
 
     print("\n--- Matches Within Time Windows ---")
 
-    for days in [1, 7, 30, 90, 180, 365]:
+    for days in [1, 7, 14, 30, 60, 90, 180, 365]:
         count = (matches["DaysDifference"] <= days).sum()
 
-        print(
-            f"Within {days:>3} days: "
-            f"{count:>5,} "
-            f"({count / len(matches) * 100:.1f}%)"
-        )
+        print(f"Within {days:>3} days: {count:>5,} ({count / len(matches) * 100:.1f}%)")
