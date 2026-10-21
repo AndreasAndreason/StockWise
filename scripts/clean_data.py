@@ -4,10 +4,21 @@ from pathlib import Path
 
 
 RAW_FILE = Path("data/raw/Online Retail.xlsx")
+# OUTPUT_FILE = Path("data/processed/daily_sales.csv")
 OUTPUT_FILE = Path("data/processed/daily_sales.csv")
 
+CANCELLATION_WINDOW_DAYS = 2
 
-def load_data():
+
+def load_data() -> pd.DataFrame:
+    """
+    Load the raw retail transaction dataset from Excel.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Raw transaction-level retail data.
+    """
     print("Loading raw dataset...")
     start = time.perf_counter()
 
@@ -17,19 +28,37 @@ def load_data():
     return df
 
 
-def classify_transactions(df):
+def classify_transactions(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Classify retail transactions based on invoice number and quantity.
+
+    Positive quantities are classified as sales. Invoice numbers
+    beginning with `C` are classified as cancellations. Other
+    negative-quantity transactions are classified as inventory
+    adjustments.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Raw transaction-level retail data containing `InvoiceNo`
+        and `Quantity` columns.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Copy of the input data with an additional `TransactionType`
+        column.
+    """
     start = time.perf_counter()
     df = df.copy()
 
     invoice = df["InvoiceNo"].astype(str).str.strip()
+    is_cancellation = invoice.str.startswith("C")
 
     df["TransactionType"] = "OTHER"
-
     df.loc[df["Quantity"] > 0, "TransactionType"] = "SALE"
-
-    df.loc[invoice.str.startswith("C"), "TransactionType"] = "CANCELLATION"
-
-    df.loc[(df["Quantity"] < 0) & ~invoice.str.startswith("C"), "TransactionType"] = "INVENTORY_ADJUSTMENT"
+    df.loc[is_cancellation, "TransactionType"] = "CANCELLATION"
+    df.loc[(df["Quantity"] < 0) & ~is_cancellation, "TransactionType"] = "INVENTORY_ADJUSTMENT"
 
     print(f"Classification completed in {time.perf_counter() - start:.2f} seconds")
     return df
@@ -49,6 +78,14 @@ def match_cancellations(df):
 
     Returns the set of sale row indices that were identified
     as reversed by a cancellation.
+
+    This function is not used in the production cleaning pipeline.
+    The dataset does not provide an explicit relationship between
+    cancellation records and their original sales transactions.
+    The investigated matching produced an uncertain time distribution,
+    so selecting a cancellation window would introduce an arbitrary
+    assumption. Cancellation matching is therefore retained only
+    as an exploratory analysis.
     """
     start = time.perf_counter()
 
@@ -64,7 +101,6 @@ def match_cancellations(df):
     used_sales = set()
     reversed_sales = set()
 
-    matched_within_window = 0
     unmatched_cancellations = 0
 
     for sale_index, cancellation in cancellations.iterrows():
@@ -103,21 +139,34 @@ def match_cancellations(df):
     return reversed_sales
 
 
-def create_daily_sales(df):
-    df = df.copy()
+def create_daily_sales(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Aggregate positive sales into daily product-level demand.
 
-    # Demand consists of positive sales only.
-    # Cancellations and other negative inventory movements
-    # are intentionally excluded from demand forecasting.
+    Cancellations and other negative inventory movements are
+    excluded from demand forecasting.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Classified transaction-level retail data containing
+        `TransactionType`, `InvoiceDate`, `StockCode`, and
+        `Quantity` columns.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Daily product-level demand data containing `Date`,
+        `StockCode`, and `Demand`.
+    """
+    start = time.perf_counter()
+
     sales = df[df["TransactionType"] == "SALE"].copy()
-
     sales["Date"] = sales["InvoiceDate"].dt.date
 
-    daily_sales = (
-        sales.groupby(["Date", "StockCode"], as_index=False)
-        .agg(Demand=("Quantity", "sum"))
-    )
+    daily_sales = (sales.groupby(["Date", "StockCode"], as_index=False).agg(Demand=("Quantity", "sum")))
 
+    print(f"Daily sales aggregation completed in {time.perf_counter() - start:.2f} seconds")
     return daily_sales
 
 
@@ -140,11 +189,9 @@ def main():
     daily_sales = create_daily_sales(df)
 
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-
     daily_sales.to_csv(OUTPUT_FILE, index=False)
 
     print(f"\nDaily sales rows: {len(daily_sales):,}")
-
     print(f"Saved to: {OUTPUT_FILE}")
 
 

@@ -1,7 +1,6 @@
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-
 from core.forecasting.dataset import load_daily_sales, create_daily_series
 from core.forecasting.baseline import create_baseline_features
+from core.forecasting.evaluation import evaluate_forecast
 
 
 df = load_daily_sales()
@@ -20,15 +19,13 @@ train = evaluation_data[evaluation_data["Date"] <= cutoff_date]
 
 test = evaluation_data[evaluation_data["Date"] > cutoff_date]
 
-mae = mean_absolute_error(test["Demand"], test["BaselineForecast"])
-
-rmse = mean_squared_error(test["Demand"], test["BaselineForecast"]) ** 0.5
+metrics = evaluate_forecast(test["Demand"], test["BaselineForecast"])
 
 print("--- Baseline Evaluation ---")
 
-print(f"Cutoff date: {cutoff_date.date()}")
+print(f"Cutoff date: {cutoff_date.date()}") # type: ignore
 print(f"Training rows: {len(train):,}")
 print(f"Test rows: {len(test):,}")
 
-print(f"\nMAE:  {mae:.2f}")
-print(f"RMSE: {rmse:.2f}")
+print(f"\nMAE:  {metrics['MAE']:.2f}")
+print(f"RMSE: {metrics['RMSE']:.2f}")

@@ -6,14 +6,16 @@ An independent Python project that explores inventory demand forecasting and inv
 
 The project uses historical retail transaction data to explore how data analysis, statistical forecasting, machine learning, and inventory management logic can be combined to support better stock planning.
 
-The planned system will:
+The current focus is on:
 
-- Analyze historical product sales
-- Forecast future product demand
-- Identify products that may require replenishment
-- Calculate reorder recommendations based on forecast demand and inventory parameters
-- Detect unusual sales patterns
-- Present key inventory metrics through a dashboard
+- Analyzing historical product sales
+- Cleaning and validating transaction data
+- Building daily product-level demand series
+- Evaluating demand forecasting baselines
+- Profiling product-level demand characteristics
+- Developing forecasting features and machine-learning models
+
+Inventory reorder recommendations and other application functionality will be developed after the forecasting stage.
 
 ### Data Source
 
@@ -32,15 +34,15 @@ The original dataset contains transaction data from a UK-based online retailer. 
 The original dataset is not included in this repository.
 The `data/raw/` directory is excluded from version control.
 
-The source data is processed and transformed for this project. Inventory levels, supplier lead times, safety-stock parameters, and other business-specific data may be synthetically generated.
-
-Changes made to the source data will be documented.
+The source data is processed and transformed for this project. Inventory levels, supplier lead times, safety-stock parameters, and other business-specific data may be synthetically generated later.
 
 The dataset's authors and the UCI Machine Learning Repository are not affiliated with or endorsing this project.
 
 ## Project Status
 
 **Status:** In Development
+
+The current development stage focuses on data preparation, demand analysis, forecasting baselines, and preparation for machine-learning forecasting.
 
 ## Features
 
@@ -108,8 +110,6 @@ This investigation was useful for understanding the data, but it was ultimately 
 
 The source dataset identifies cancellation records but does not provide an explicit relationship or transaction ID linking a cancellation to its original order. Therefore, a statistical match based on product, quantity, price, and time cannot establish with certainty that two records represent the same underlying order.
 
-For example, multiple transactions can contain the same product, quantity, and price. Selecting the closest previous transaction creates an inferred relationship that may not exist in the original operational system.
-
 The project therefore follows a conservative principle:
 
 > **Do not invent business relationships that cannot be established from the source data.**
@@ -126,8 +126,6 @@ Cancellation records and other negative inventory movements are not treated as n
 
 The resulting `daily_sales.csv` dataset therefore represents historical product demand, rather than a complete representation of every physical inventory movement.
 
-This distinction is important for the future inventory-management functionality. Returns, damages, cancellations, and stock adjustments may affect inventory levels or warehouse capacity, but they should not automatically be interpreted as negative customer demand.
-
 #### Demand Investigation and Outlier Handling
 
 After the initial demand preparation, the processed demand data was investigated to identify unusually large product-day quantities and high-volume sales dates.
@@ -140,7 +138,7 @@ The investigation highlighted:
 
 The corresponding raw transactions were inspected where appropriate. The 12,540-unit observation for product `84826` did not have an identified cancellation at the investigated position and was therefore retained.
 
-The 80,995-unit observation was also retained. Although it is an extreme observation, its magnitude alone is not sufficient evidence that it is invalid. The earlier investigation found a corresponding cancellation record, but the available source fields do not provide enough information to establish a reliable general cancellation-to-original-sale relationship.
+The 80,995-unit observation was also retained. Although it is an extreme observation, its magnitude alone is not sufficient evidence that it is invalid.
 
 The current approach is therefore to:
 
@@ -187,6 +185,10 @@ The data-cleaning script is located in:
 
     scripts/
 
+The main project runner is:
+
+    stockwise.py
+
 The analysis scripts are numbered chronologically to document the investigation and development process.
 
 Current analysis scripts include:
@@ -194,15 +196,17 @@ Current analysis scripts include:
     analysis/
         01_inspect_data.py
         02_data_quality.py
-        ...
+        03_inspect_product.py
+        04_inspect_processed_data.py
+        05_inspect_demand.py
+        06_inspect_cancellations.py
+        07_inspect_forecasting_dataset.py
         08_evaluate_baseline.py
         09_profile_demand.py
 
 The cleaning script is:
 
     scripts/clean_data.py
-
-These scripts support raw-data inspection, data-quality checks, transaction classification, cancellation investigation, demand investigation, processed-data validation, baseline forecasting evaluation, and statistical demand profiling.
 
 The processed demand dataset is generated at:
 
@@ -230,7 +234,7 @@ The source transaction data also contains:
 
 Further data modelling will be developed as the project progresses.
 
-#### Current Data Preparation Status
+### Current Data Preparation Status
 
 The initial data preparation stage focuses on understanding the source data and producing a daily product-demand dataset.
 
@@ -260,8 +264,6 @@ The forecasting dataset currently contains:
 - 801,031 zero-demand product-days
 - 276,843 positive-demand product-days
 - Approximately 74.4% zero-demand observations
-
-The cleaning and forecasting preparation logic is based on the fields available in the source dataset. Because the original retailer's operational rules are not fully documented, some transaction interpretations remain limited by the available source information.
 
 ### Demand Forecasting Analysis
 
@@ -301,10 +303,6 @@ The current evaluation produced:
 | Test rows | 207,492 |
 | MAE | 10.11 |
 | RMSE | 62.37 |
-
-**MAE** of 10.11 means that the baseline's average absolute prediction error is approximately 10 demand units per product-day across the evaluated test observations.
-
-The considerably larger RMSE of 62.37 indicates that some forecasting errors are substantially larger than the typical error. This is consistent with the presence of highly variable and extreme demand observations in the dataset.
 
 The baseline is retained as a reference point for subsequent statistical and machine-learning forecasting methods.
 
@@ -348,35 +346,11 @@ The data contains:
 
 Because of these characteristics, the forecasting strategy will first evaluate statistical and intermittent-demand methods before relying on machine-learning models.
 
-Future forecasting analysis will compare simple statistical baselines and specialized intermittent-demand methods with machine-learning approaches using the same time-based evaluation framework.
-
-### Architecture
-
-The planned system architecture is:
-
-    Raw Dataset
-         |
-         v
-    Data Validation & Cleaning
-         |
-         v
-    PostgreSQL
-         |
-         v
-    Feature Engineering
-         |
-         v
-    Demand Forecasting
-         |
-         +---------------> FastAPI
-         |
-         +---------------> Streamlit Dashboard
-
 ### Machine Learning
 
 Machine-learning forecasting models will be evaluated after the statistical forecasting stage.
 
-Planned candidate models include:
+Potential candidate models include:
 
 - Linear Regression
 - Random Forest
@@ -394,79 +368,20 @@ Models will be evaluated using chronological time-based validation.
 
 Machine-learning models will be compared against the established statistical baselines rather than evaluated in isolation.
 
-### API
-
-Planned REST API endpoints include:
-
-- `GET /health`
-- `GET /products`
-- `GET /forecast/`
-- `GET /inventory/alerts`
-- `GET /anomalies`
-
-The API will be implemented using FastAPI.
-
-### Dashboard
-
-The planned manager dashboard will provide:
-
-- Historical demand trends
-- Forecasted demand
-- Inventory alerts
-- Reorder recommendations
-- Unusual demand patterns
-
-The dashboard will be implemented using Streamlit.
-
 ## Technology Stack
 
 - Python 3.14
 - pandas
 - NumPy
 - scikit-learn
-- FastAPI
-- Streamlit
-- PostgreSQL
-- pytest
-- Docker / Docker Compose
-- GitHub Actions
 
 Additional libraries will be added only when justified by the project requirements.
-
-## Application Workflow
-
-The intended application workflow is:
-
-    Historical Transactions
-            |
-            v
-    Data Quality & Cleaning
-            |
-            v
-    Daily Product Demand
-            |
-            v
-    Demand Analysis
-            |
-            v
-    Statistical Forecasting
-            |
-            v
-    Machine Learning Forecasting
-            |
-            v
-    Forecast Evaluation
-            |
-            v
-    Inventory / Reorder Logic
-            |
-            v
-    FastAPI + Streamlit
 
 ## Project Structure
 
     StockWise/
     ├── analysis/
+    │   ├── __init__.py
     │   ├── 01_inspect_data.py
     │   ├── ...
     │   ├── 08_evaluate_baseline.py
@@ -474,7 +389,8 @@ The intended application workflow is:
     ├── core/
     │   ├── __init__.py
     │   └── forecasting/
-    │       ├── __init__.py
+    │       ├── evaluation.py
+    │       ├── profiling.py
     │       ├── dataset.py
     │       └── baseline.py
     ├── data/
@@ -483,7 +399,7 @@ The intended application workflow is:
     │   └── raw/
     ├── scripts/
     │   └── clean_data.py
-    ├── tests/
+    ├── stockwise.py
     ├── .gitattributes
     ├── .gitignore
     ├── README.md
@@ -501,33 +417,31 @@ Install the project dependencies:
 
 ## Usage
 
-Run analysis scripts from the project root using Python's module execution syntax.
+The project can be run through the main `stockwise.py` file.
 
-Initial data inspection:
+Individual analysis stages can be enabled or disabled in `stockwise.py` as needed.
 
-    python -m analysis.01_inspect_data
+Example:
 
-Run the data-quality analysis:
+    import runpy
 
-    python -m analysis.02_data_quality
+    runpy.run_path(str("analysis/01_inspect_data.py"), run_name="__main__")
 
-Generate the initial processed daily-demand dataset:
+The numbered analysis scripts can also be executed individually from the project root.
 
-    python scripts/clean_data.py
-
-Evaluate the forecasting baseline:
+For example:
 
     python -m analysis.08_evaluate_baseline
 
-Profile product-level demand:
-
     python -m analysis.09_profile_demand
+
+Generate the processed daily-demand dataset:
+
+    python scripts/clean_data.py
 
 The processed dataset will be written to:
 
     data/processed/daily_sales.csv
-
-Further usage instructions will be added as the API, forecasting pipeline, and dashboard are implemented.
 
 ## Privacy and Data Handling
 
@@ -560,21 +474,15 @@ These limitations are part of the project's design and will be documented as the
 
 Planned next steps include:
 
+- Develop forecasting features.
 - Evaluate additional statistical forecasting methods.
 - Evaluate intermittent-demand forecasting methods such as Croston, SBA, and TSB.
-- Compare statistical methods using the same time-based evaluation framework.
-- Develop forecasting features for machine-learning models.
 - Train and evaluate machine-learning forecasting models.
 - Compare statistical and machine-learning forecasting performance.
 - Investigate product-level model selection.
-- Develop anomaly detection for unusual demand patterns.
+- Investigate anomaly detection for unusual demand patterns.
 - Introduce synthetic inventory levels and supplier lead times.
 - Implement reorder-point and reorder-quantity calculations.
-- Build the FastAPI service.
-- Build the Streamlit dashboard.
-- Add automated tests.
-- Add Docker / Docker Compose configuration.
-- Add GitHub Actions for automated testing.
 
 ## License
 

@@ -1,122 +1,88 @@
 import pandas as pd
 
 from core.forecasting.dataset import load_daily_sales, create_daily_series
+from core.forecasting.profiling import profile_demand
 
 
-def profile_demand(df):
-    grouped = df.groupby("StockCode")["Demand"]
 
-    profile = grouped.agg(
-        ActiveDays="count",
-        TotalDemand="sum",
-        MeanDemand="mean",
-        MedianDemand="median",
-        StdDemand="std",
-        MinDemand="min",
-        MaxDemand="max",
-        P25=lambda x: x.quantile(0.25),
-        P75=lambda x: x.quantile(0.75),
-        P90=lambda x: x.quantile(0.90),
-    ).reset_index()
+print("Loading daily sales...")
+df = load_daily_sales()
 
-    positive_days = (grouped.apply(lambda x: (x > 0).sum()).rename("PositiveDemandDays").reset_index())
+print("Creating daily product series...")
+daily_series = create_daily_series(df)
 
-    profile = profile.merge(positive_days, on="StockCode", how="left")
+print("Profiling product demand...")
+profile = profile_demand(daily_series)
 
-    profile["ZeroDemandDays"] = (profile["ActiveDays"] - profile["PositiveDemandDays"])
+print("\n--- Demand Profile ---")
+print(f"Products: {len(profile):,}")
+print(f"Rows in forecasting dataset: {len(daily_series):,}")
 
-    profile["ZeroDemandPct"] = (profile["ZeroDemandDays"] / profile["ActiveDays"] * 100)
-
-    profile["PositiveDemandPct"] = (profile["PositiveDemandDays"] / profile["ActiveDays"] * 100)
-
-    profile["CoefficientOfVariation"] = (profile["StdDemand"] / profile["MeanDemand"])
-
-    return profile
-
-
-def main():
-    print("Loading daily sales...")
-    df = load_daily_sales()
-
-    print("Creating daily product series...")
-    daily_series = create_daily_series(df)
-
-    print("Profiling product demand...")
-    profile = profile_demand(daily_series)
-
-    print("\n--- Demand Profile ---")
-    print(f"Products: {len(profile):,}")
-    print(f"Rows in forecasting dataset: {len(daily_series):,}")
-
-    print("\n--- Overall Demand ---")
-    print(
-        profile[
-            [
-                "ActiveDays",
-                "TotalDemand",
-                "MeanDemand",
-                "MedianDemand",
-                "StdDemand",
-                "MinDemand",
-                "MaxDemand",
-                "ZeroDemandPct",
-                "PositiveDemandPct",
-                "CoefficientOfVariation",
-            ]
-        ].describe()
-    )
-
-    print("\n--- Products With Highest Zero-Demand Percentage ---")
-    print(
-        profile[
-            [
-                "StockCode",
-                "ActiveDays",
-                "PositiveDemandDays",
-                "ZeroDemandPct",
-                "MeanDemand",
-                "TotalDemand",
-            ]
+print("\n--- Overall Demand ---")
+print(
+    profile[
+        [
+            "ActiveDays",
+            "TotalDemand",
+            "MeanDemand",
+            "MedianDemand",
+            "StdDemand",
+            "MinDemand",
+            "MaxDemand",
+            "ZeroDemandPct",
+            "PositiveDemandPct",
+            "CoefficientOfVariation",
         ]
-        .sort_values("ZeroDemandPct", ascending=False)
-        .head(10)
-        .to_string(index=False)
-    )
+    ].describe()
+)
 
-    print("\n--- Products With Highest Coefficient of Variation ---")
-    print(
-        profile[
-            [
-                "StockCode",
-                "ActiveDays",
-                "MeanDemand",
-                "StdDemand",
-                "CoefficientOfVariation",
-                "MaxDemand",
-            ]
+print("\n--- Products With Highest Zero-Demand Percentage ---")
+print(
+    profile[
+        [
+            "StockCode",
+            "ActiveDays",
+            "PositiveDemandDays",
+            "ZeroDemandPct",
+            "MeanDemand",
+            "TotalDemand",
         ]
-        .sort_values("CoefficientOfVariation", ascending=False)
-        .head(10)
-        .to_string(index=False)
-    )
+    ]
+    .sort_values("ZeroDemandPct", ascending=False)
+    .head(10)
+    .to_string(index=False)
+)
 
-    print("\n--- Products With Highest Total Demand ---")
-    print(
-        profile[
-            [
-                "StockCode",
-                "ActiveDays",
-                "TotalDemand",
-                "MeanDemand",
-                "MedianDemand",
-                "MaxDemand",
-            ]
+print("\n--- Products With Highest Coefficient of Variation ---")
+print(
+    profile[
+        [
+            "StockCode",
+            "ActiveDays",
+            "MeanDemand",
+            "StdDemand",
+            "CoefficientOfVariation",
+            "MaxDemand",
         ]
-        .sort_values("TotalDemand", ascending=False)
-        .head(10)
-        .to_string(index=False)
-    )
+    ]
+    .sort_values("CoefficientOfVariation", ascending=False)
+    .head(10)
+    .to_string(index=False)
+)
 
-
-if __name__ == "__main__":
-    main()
+print("\n--- Products With Highest Total Demand ---")
+print(
+    profile[
+        [
+            "StockCode",
+            "ActiveDays",
+            "TotalDemand",
+            "MeanDemand",
+            "MedianDemand",
+            "MaxDemand",
+        ]
+    ]
+    .sort_values("TotalDemand", ascending=False)
+    .head(10)
+    .to_string(index=False)
+)
