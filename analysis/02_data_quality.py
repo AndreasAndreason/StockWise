@@ -17,10 +17,18 @@ print("Negative quantity without cancellation:",
       (~is_cancellation & is_negative).sum())
 
 print("\nNegative quantity examples:")
-print(df.loc[is_negative, ["InvoiceNo", "StockCode", "Quantity", "InvoiceDate"]].head(10).to_string(index=False))
+print(
+    df.loc[is_negative,
+    ["InvoiceNo", "StockCode", "Quantity", "InvoiceDate"]]
+    .head(10).to_string(index=False)
+    )
 
 print("\nCancellation examples:")
-print(df.loc[is_cancellation, ["InvoiceNo", "StockCode", "Quantity", "InvoiceDate"]].head(10).to_string(index=False))
+print(
+    df.loc[is_cancellation, 
+    ["InvoiceNo", "StockCode", "Quantity", "InvoiceDate"]]
+    .head(10).to_string(index=False)
+    )
 
 print("\nMissing descriptions by product:")
 print(df.loc[df["Description"].isna(), "StockCode"].value_counts().head(10))
@@ -29,25 +37,35 @@ print(df.loc[df["Description"].isna(), "StockCode"].value_counts().head(10))
 # Look at cancellation invoices and their possible original invoice numbers
 cancellations = df[df["InvoiceNo"].astype(str).str.startswith("C")].copy()
 
-cancellations["OriginalInvoiceNo"] = (cancellations["InvoiceNo"].astype(str).str.replace("^C", "", regex=True))
+cancellations["OriginalInvoiceNo"] = (
+    cancellations["InvoiceNo"]
+    .astype(str)
+    .str.replace("^C", "", regex=True)
+    )
 
 # Check whether the invoice without "C" exists
 all_invoices = set(df["InvoiceNo"].astype(str))
 
-cancellations["OriginalExists"] = (cancellations["OriginalInvoiceNo"].isin(all_invoices))
+cancellations["OriginalExists"] = (
+    cancellations["OriginalInvoiceNo"]
+    .isin(all_invoices)
+    )
 
 print("\nCancellation invoice matching:")
 print(cancellations["OriginalExists"].value_counts())
 
 print("\nExamples:")
-print(cancellations[    [
+print(
+    cancellations[
+        [
             "InvoiceNo",
             "OriginalInvoiceNo",
             "StockCode",
             "Quantity",
             "OriginalExists",
         ]
-    ].head(20).to_string(index=False))
+        ].head(20).to_string(index=False)
+    )
 
 
 positive_qty = df.loc[df["Quantity"] > 0, "Quantity"].sum()
@@ -61,7 +79,8 @@ print(f"Absolute negative quantity: {abs(negative_qty):,}")
 
 return_rate = abs(negative_qty) / positive_qty
 
-print(f"Overall return/cancellation quantity rate: {return_rate:.2%}")
+print(f"Overall return/cancellation quantity rate:",
+      f"{return_rate:.2%}")
 
 product_summary = (
     df.assign(
@@ -75,10 +94,16 @@ product_summary = (
     )
 )
 
-product_summary["ReturnRate"] = (product_summary["NegativeQuantity"].abs()/ product_summary["PositiveQuantity"])
+product_summary["ReturnRate"] = (
+    product_summary["NegativeQuantity"].abs()
+    / product_summary["PositiveQuantity"]
+    )
 
 print("\nProducts with highest return rates:")
-print(product_summary[product_summary["PositiveQuantity"] > 0].sort_values("ReturnRate", ascending=False).head(20).to_string())
+print(product_summary[
+    product_summary["PositiveQuantity"] > 0
+    ].sort_values("ReturnRate", ascending=False)
+      .head(20).to_string())
 
 
 problem_products = [

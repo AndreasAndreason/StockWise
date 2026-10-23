@@ -11,6 +11,10 @@ data/raw/*
 .venv/
 venv/
 
+# Jupyter
+.ipynb_checkpoints
+start_jupyter.bat
+
 # User-specific files
 *.rsuser
 *.suo

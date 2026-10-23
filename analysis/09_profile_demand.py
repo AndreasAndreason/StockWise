@@ -4,7 +4,6 @@ from core.forecasting.dataset import load_daily_sales, create_daily_series
 from core.forecasting.profiling import profile_demand
 
 
-
 print("Loading daily sales...")
 df = load_daily_sales()
 

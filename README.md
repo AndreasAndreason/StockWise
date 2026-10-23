@@ -110,10 +110,6 @@ This investigation was useful for understanding the data, but it was ultimately 
 
 The source dataset identifies cancellation records but does not provide an explicit relationship or transaction ID linking a cancellation to its original order. Therefore, a statistical match based on product, quantity, price, and time cannot establish with certainty that two records represent the same underlying order.
 
-The project therefore follows a conservative principle:
-
-> **Do not invent business relationships that cannot be established from the source data.**
-
 Cancellation records are consequently treated as independent transaction events and excluded from the demand dataset rather than being used to remove potentially corresponding positive sales.
 
 The previously investigated matching approach remains part of the project's data-quality investigation, but it is not used by the current cleaning logic.
@@ -177,7 +173,22 @@ The current data-processing workflow is:
            v
     data/processed/daily_sales.csv
 
-Initial data analysis and investigation scripts are located in:
+The project originally used numbered Python scripts for exploratory analysis and development.
+
+The existing `analysis/` directory is intentionally retained as the historical script-based analysis work. It is not being removed as part of the notebook migration.
+
+Further analytical development is now being performed in Jupyter notebooks.
+
+The current notebook workflow is organized into:
+
+    notebooks/
+    ├── 01_raw_data_analysis.ipynb
+    ├── 02_clean_data_analysis.ipynb
+    └── 03_forecasting_analysis.ipynb
+
+The notebooks are now the primary location for ongoing exploratory, validation, and forecasting analysis.
+
+The existing analysis scripts remain available for reference:
 
     analysis/
 
@@ -189,7 +200,7 @@ The main project runner is:
 
     stockwise.py
 
-The analysis scripts are numbered chronologically to document the investigation and development process.
+The analysis scripts are numbered chronologically and are preserved as the previous script-based analysis workflow.
 
 Current analysis scripts include:
 
@@ -248,7 +259,8 @@ Completed work includes:
 - Definition of demand as positive sales quantities.
 - Inspection of unusually large product-day demand values.
 - Generation and validation of the processed daily-demand dataset.
-- Separation of exploratory analysis scripts from the data-cleaning script.
+- Separation of exploratory analysis from the operational data-cleaning script.
+- Migration of ongoing analysis from numbered Python scripts to Jupyter notebooks.
 - Creation of a continuous daily time series for each product within its observed activity period.
 - Filling missing product-days within the observed activity period with zero demand.
 - Evaluation of a 7-day seasonal-naive forecasting baseline.
@@ -374,6 +386,7 @@ Machine-learning models will be compared against the established statistical bas
 - pandas
 - NumPy
 - scikit-learn
+- JupyterLab
 
 Additional libraries will be added only when justified by the project requirements.
 
@@ -387,7 +400,6 @@ Additional libraries will be added only when justified by the project requiremen
     │   ├── 08_evaluate_baseline.py
     │   └── 09_profile_demand.py
     ├── core/
-    │   ├── __init__.py
     │   └── forecasting/
     │       ├── evaluation.py
     │       ├── profiling.py
@@ -397,9 +409,12 @@ Additional libraries will be added only when justified by the project requiremen
     │   ├── processed/
     │   │   └── daily_sales.csv
     │   └── raw/
+    ├── notebooks/
+    │   ├── raw_data_analysis.ipynb
+    │   ├── clean_data_analysis.ipynb
+    │   └── forecasting_analysis.ipynb
     ├── scripts/
     │   └── clean_data.py
-    ├── stockwise.py
     ├── .gitattributes
     ├── .gitignore
     ├── README.md
@@ -411,23 +426,28 @@ Additional libraries will be added only when justified by the project requiremen
 
 - Python 3.14
 
+Create a virtual environment from the project root:
+
+    python -m venv .venv
+
+Activate the virtual environment:
+
+    .venv\Scripts\activate
+
+Activation in PowerShell:
+
+    .\.venv\Scripts\Activate.ps1
+
 Install the project dependencies:
 
-    pip install -r requirements.txt
+    python -m pip install -r requirements.txt
+
 
 ## Usage
 
-The project can be run through the main `stockwise.py` file.
+### Running Analysis Scripts
 
-Individual analysis stages can be enabled or disabled in `stockwise.py` as needed.
-
-Example:
-
-    import runpy
-
-    runpy.run_path(str("analysis/01_inspect_data.py"), run_name="__main__")
-
-The numbered analysis scripts can also be executed individually from the project root.
+The project contains numbered Python analysis scripts in the `analysis/` directory. These scripts are retained as the earlier script-based analysis workflow and can be executed individually from the project root through the terminal.
 
 For example:
 
@@ -435,13 +455,38 @@ For example:
 
     python -m analysis.09_profile_demand
 
-Generate the processed daily-demand dataset:
+### Data Cleaning
+
+The data-cleaning pipeline is implemented in:
+
+    scripts/clean_data.py
+
+Run it from the project root through the terminal:
 
     python scripts/clean_data.py
 
 The processed dataset will be written to:
 
     data/processed/daily_sales.csv
+
+### JupyterLab
+
+The primary interface for the current analysis is JupyterLab.
+
+From the StockWise project root, start JupyterLab through the terminal:
+
+    jupyter lab
+
+JupyterLab will open in the browser. Navigate to the `notebooks/` directory and open one of the analysis notebooks:
+
+    notebooks/
+    ├── 01_raw_data_analysis.ipynb
+    ├── 02_clean_data_analysis.ipynb
+    └── 03_forecasting_analysis.ipynb
+
+The notebooks contain the current exploratory analysis, data validation, demand profiling, and forecasting experiments.
+
+The notebooks should be opened from the project environment so that imports from `core/` and access to the project data directories work correctly.
 
 ## Privacy and Data Handling
 

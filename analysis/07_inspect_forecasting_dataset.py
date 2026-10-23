@@ -5,7 +5,11 @@ df = load_daily_sales()
 
 forecasting_data = create_daily_series(df)
 
-product_history = (forecasting_data.groupby("StockCode")["Date"].agg(FirstDate="min", LastDate="max", Days="nunique"))
+product_history = (
+    forecasting_data
+    .groupby("StockCode")["Date"]
+    .agg(FirstDate="min", LastDate="max", Days="nunique")
+    )
 
 print("\n--- Product History ---")
 
@@ -23,7 +27,9 @@ print("\n--- Forecasting Dataset ---")
 
 print(f"Rows: {len(forecasting_data):,}")
 print(f"Products: {forecasting_data['StockCode'].nunique():,}")
-print(f"Date range: {forecasting_data['Date'].min().date()} to {forecasting_data['Date'].max().date()}")
+print(
+    f"Date range: {forecasting_data['Date'].min().date()}",
+    f"to {forecasting_data['Date'].max().date()}")
 
 print("\n--- Demand ---")
 
