@@ -6,7 +6,7 @@ from pathlib import Path
 RAW_FILE = Path("data/raw/Online Retail.xlsx")
 OUTPUT_FILE = Path("data/processed/daily_sales.csv")
 
-CANCELLATION_WINDOW_DAYS = 2 # Unused
+# CANCELLATION_WINDOW_DAYS = 2 # Unused
 
 
 def load_data() -> pd.DataFrame:
